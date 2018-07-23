@@ -134,13 +134,12 @@ class _TAXIIEndpoint(object):
     resources are released.
 
     """
-    def __init__(self, url, conn=None, user=None, password=None, verify=True):
+    def __init__(self, url, conn=None, user=None, password=None):
         """Create a TAXII endpoint.
 
         Args:
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            verify (bool): validate the entity credentials (default: True)
             conn (_HTTPConnection): A connection to reuse (optional)
 
         """
@@ -150,7 +149,7 @@ class _TAXIIEndpoint(object):
         elif conn:
             self._conn = conn
         else:
-            self._conn = _HTTPConnection(user, password, verify)
+            self._conn = _HTTPConnection(user, password)
 
         self.url = url
 
@@ -177,7 +176,7 @@ class Status(_TAXIIEndpoint):
     # than just getting them returned from Collection.add_objects(), and there
     # aren't other endpoints to call on the Status object.
 
-    def __init__(self, url, conn=None, user=None, password=None, verify=True,
+    def __init__(self, url, conn=None, user=None, password=None,
                  **kwargs):
         """Create an API root resource endpoint.
 
@@ -189,7 +188,7 @@ class Status(_TAXIIEndpoint):
                 to providing username/password
 
         """
-        super(Status, self).__init__(url, conn, user, password, verify)
+        super(Status, self).__init__(url, conn, user, password)
         if kwargs:
             self._populate_fields(**kwargs)
         else:
@@ -316,7 +315,7 @@ class Collection(_TAXIIEndpoint):
 
     """
 
-    def __init__(self, url, conn=None, user=None, password=None, verify=True,
+    def __init__(self, url, conn=None, user=None, password=None,
                  **kwargs):
         """
         Initialize a new Collection.  Either user/password or conn may be
@@ -329,16 +328,12 @@ class Collection(_TAXIIEndpoint):
             url (str): A TAXII endpoint for a collection
             user (str): User name for authentication (optional)
             password (str): Password for authentication (optional)
-            verify (bool): Either a boolean, in which case it controls whether
-                we verify the server's TLS certificate, or a string, in which
-                case it must be a path to a CA bundle to use. Defaults to
-                `True` (optional)
             conn (_HTTPConnection): A connection to reuse (optional)
             kwargs: Collection metadata, if known in advance (optional)
 
         """
 
-        super(Collection, self).__init__(url, conn, user, password, verify)
+        super(Collection, self).__init__(url, conn, user, password)
 
         self._loaded = False
 
@@ -549,7 +544,7 @@ class ApiRoot(_TAXIIEndpoint):
 
     """
 
-    def __init__(self, url, conn=None, user=None, password=None, verify=True):
+    def __init__(self, url, conn=None, user=None, password=None):
         """Create an API root resource endpoint.
 
         Args:
@@ -560,7 +555,7 @@ class ApiRoot(_TAXIIEndpoint):
                 to providing username/password
 
         """
-        super(ApiRoot, self).__init__(url, conn, user, password, verify)
+        super(ApiRoot, self).__init__(url, conn, user, password)
 
         self._loaded_collections = False
         self._loaded_information = False
@@ -668,7 +663,7 @@ class Server(_TAXIIEndpoint):
 
     """
 
-    def __init__(self, url, conn=None, user=None, password=None, verify=True):
+    def __init__(self, url, conn=None, user=None, password=None):
         """Create a server discovery endpoint.
 
         Args:
@@ -679,11 +674,10 @@ class Server(_TAXIIEndpoint):
                 to providing username/password
 
         """
-        super(Server, self).__init__(url, conn, user, password, verify)
+        super(Server, self).__init__(url, conn, user, password)
 
         self._user = user
         self._password = password
-        self._verify = verify
         self._loaded = False
 
     @property
@@ -732,8 +726,7 @@ class Server(_TAXIIEndpoint):
         roots = response.get("api_roots", [])  # optional
         self._api_roots = [ApiRoot(url,
                                    user=self._user,
-                                   password=self._password,
-                                   verify=self._verify)
+                                   password=self._password)
                            for url in roots]
         # If 'default' is one of the existing API Roots, reuse that object
         # rather than creating a duplicate. The TAXII 2.0 spec says that the
@@ -767,8 +760,13 @@ class _HTTPConnection(object):
         Args:
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            verify (bool): validate the entity credentials. (default: True)
-
+            verify (bool): Either a boolean, in which case it controls whether
+                we verify the server's TLS certificate, or a string, in which
+                case it must be a path to a CA bundle to use. Defaults to
+                `True` (optional)
+            proxies (dict): Dictionary mapping protocol or protocol and host to
+                the URL of the proxy (e.g. {"http": "foo.bar:3128",
+                "http://host.name": "foo.bar:4012"}) to be used on each Request.
         """
         self.session = requests.Session()
         self.session.verify = verify

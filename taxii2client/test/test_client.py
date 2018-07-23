@@ -675,7 +675,7 @@ def test_status_missing_id_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("id")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'id' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -684,7 +684,7 @@ def test_status_missing_status_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("status")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'status' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -693,7 +693,7 @@ def test_status_missing_total_count_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("total_count")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'total_count' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -702,7 +702,7 @@ def test_status_missing_success_count_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("success_count")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'success_count' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -711,7 +711,7 @@ def test_status_missing_failure_count_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("failure_count")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'failure_count' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -720,7 +720,7 @@ def test_status_missing_pending_count_property(status_dict):
     with pytest.raises(ValidationError) as excinfo:
         status_dict.pop("pending_count")
         Status("https://example.com/api1/status/12345678-1234-1234-1234-123456789012/",
-               user="foo", password="bar", verify=False, **status_dict)
+               user="foo", password="bar", **status_dict)
 
     assert "No 'pending_count' in Status for request 'https://example.com/api1/status/12345678-1234-1234-1234-123456789012/'" == str(excinfo.value)
 
@@ -729,7 +729,7 @@ def test_collection_missing_id_property(collection_dict):
     with pytest.raises(ValidationError) as excinfo:
         collection_dict.pop("id")
         Collection("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/",
-                   user="foo", password="bar", verify=False, **collection_dict)
+                   user="foo", password="bar", **collection_dict)
 
     assert "No 'id' in Collection for request 'https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/'" == str(excinfo.value)
 
@@ -738,7 +738,7 @@ def test_collection_missing_title_property(collection_dict):
     with pytest.raises(ValidationError) as excinfo:
         collection_dict.pop("title")
         Collection("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/",
-                   user="foo", password="bar", verify=False, **collection_dict)
+                   user="foo", password="bar", **collection_dict)
 
     assert "No 'title' in Collection for request 'https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/'" == str(excinfo.value)
 
@@ -747,7 +747,7 @@ def test_collection_missing_can_read_property(collection_dict):
     with pytest.raises(ValidationError) as excinfo:
         collection_dict.pop("can_read")
         Collection("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/",
-                   user="foo", password="bar", verify=False, **collection_dict)
+                   user="foo", password="bar", **collection_dict)
 
     assert "No 'can_read' in Collection for request 'https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/'" == str(excinfo.value)
 
@@ -756,6 +756,6 @@ def test_collection_missing_can_write_property(collection_dict):
     with pytest.raises(ValidationError) as excinfo:
         collection_dict.pop("can_write")
         Collection("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/",
-                   user="foo", password="bar", verify=False, **collection_dict)
+                   user="foo", password="bar", **collection_dict)
 
     assert "No 'can_write' in Collection for request 'https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/'" == str(excinfo.value)
