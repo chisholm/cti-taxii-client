@@ -10,6 +10,7 @@ import pytz
 import requests
 import six
 import six.moves.urllib.parse as urlparse
+import re
 
 __version__ = '0.3.1'
 
@@ -129,27 +130,34 @@ def _filter_kwargs_to_query_params(filter_kwargs):
 
 class _TAXIIEndpoint(object):
     """Contains some data and functionality common to all TAXII endpoint
-    classes: a URL, connection, and ability to close the connection.  It also
-    yields support in subclasses for use as context managers, to ensure
+    classes: a URL, connection/factory, and ability to close the connection.
+    It also yields support in subclasses for use as context managers, to ensure
     resources are released.
 
     """
-    def __init__(self, url, conn=None, user=None, password=None):
+    def __init__(self, endpoint_type, url, conn_factory=None, user=None,
+                 password=None):
         """Create a TAXII endpoint.
 
         Args:
+            endpoint_type(str): Value passed to the factory, to identify the
+                type of endpoint class that needs a connection.
+            url (str): The URL of the endpoint
+            conn_factory (_ConnectionFactory): A factory used to obtain a
+                connection for this endpoint. (optional)
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            conn (_HTTPConnection): A connection to reuse (optional)
 
         """
-        if conn and (user or password):
-            raise InvalidArgumentsError("A connection and user/password may"
-                                        " not both be provided.")
-        elif conn:
-            self._conn = conn
+        if conn_factory and (user or password):
+            raise InvalidArgumentsError("A connection factory and user/password"
+                                        " may not both be provided.")
+        elif conn_factory:
+            self._conn_factory = conn_factory
         else:
-            self._conn = _HTTPConnection(user, password)
+            self._conn_factory = InheritApiRootConnectionFactory(user, password)
+
+        self._conn = self._conn_factory.get_connection(endpoint_type, url)
 
         self.url = url
 
@@ -176,19 +184,20 @@ class Status(_TAXIIEndpoint):
     # than just getting them returned from Collection.add_objects(), and there
     # aren't other endpoints to call on the Status object.
 
-    def __init__(self, url, conn=None, user=None, password=None,
+    def __init__(self, url, conn_factory=None, user=None, password=None,
                  **kwargs):
         """Create an API root resource endpoint.
 
         Args:
             url (str): URL of a TAXII status resource endpoint
+            conn_factory (_ConnectionFactory): a factory to get a connection
+                from, as an alternative to providing username/password
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            conn (_HTTPConnection): reuse connection object, as an alternative
-                to providing username/password
 
         """
-        super(Status, self).__init__(url, conn, user, password)
+        super(Status, self).__init__("status", url, conn_factory, user,
+                                     password)
         if kwargs:
             self._populate_fields(**kwargs)
         else:
@@ -307,15 +316,9 @@ class Collection(_TAXIIEndpoint):
         - ``Add Objects`` (section 5.4)
         - ``Get an Object`` (section 5.5)
         - ``Get Object Manifests`` (section 5.6)
-
-    As obtained from an ApiRoot, an instance of this class shares connection(s)
-    with all other collections obtained from the same ApiRoot, as well as the
-    ApiRoot instance itself.  Closing one will close them all.  If this is
-    undesirable, you may manually create Collection instances.
-
     """
 
-    def __init__(self, url, conn=None, user=None, password=None,
+    def __init__(self, url, conn_factory=None, user=None, password=None,
                  **kwargs):
         """
         Initialize a new Collection.  Either user/password or conn may be
@@ -328,12 +331,14 @@ class Collection(_TAXIIEndpoint):
             url (str): A TAXII endpoint for a collection
             user (str): User name for authentication (optional)
             password (str): Password for authentication (optional)
-            conn (_HTTPConnection): A connection to reuse (optional)
+            conn_factory (_ConnectionFactory): a factory to get a connection
+                from, as an alternative to providing username/password
             kwargs: Collection metadata, if known in advance (optional)
 
         """
 
-        super(Collection, self).__init__(url, conn, user, password)
+        super(Collection, self).__init__("collection", url, conn_factory, user,
+                                         password)
 
         self._loaded = False
 
@@ -506,10 +511,11 @@ class Collection(_TAXIIEndpoint):
 
         status_url = urlparse.urljoin(
             self.url,
-            "../../status/{}".format(status_json["id"])
+            "../../status/{}/".format(status_json["id"])
         )
 
-        status = Status(url=status_url, conn=self._conn, **status_json)
+        status = Status(url=status_url, conn_factory=self._conn_factory,
+                        **status_json)
 
         if not wait_for_completion or status.status == "complete":
             return status
@@ -534,28 +540,21 @@ class ApiRoot(_TAXIIEndpoint):
     and ``Get Collections`` (section 5.1) endpoints, and contains the
     information found in the corresponding ``API Root Resource``
     (section 4.2.1) and ``Collections Resource`` (section 5.1.1).
-
-    As obtained from a Server, each ApiRoot instance gets its own connection
-    pool(s).  Collections returned by instances of this class share the same
-    pools as the instance, so closing one closes all.  Also, the same
-    username/password is used to connect to them, as was used for this ApiRoot.
-    If either of these is undesirable, Collection instances may be created
-    manually.
-
     """
 
-    def __init__(self, url, conn=None, user=None, password=None):
+    def __init__(self, url, conn_factory=None, user=None, password=None):
         """Create an API root resource endpoint.
 
         Args:
             url (str): URL of a TAXII API root resource endpoint
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            conn (_HTTPConnection): reuse connection object, as an alternative
-                to providing username/password
+            conn_factory (_ConnectionFactory): a factory to get a connection
+                from, as an alternative to providing username/password
 
         """
-        super(ApiRoot, self).__init__(url, conn, user, password)
+        super(ApiRoot, self).__init__("apiroot", url, conn_factory, user,
+                                      password)
 
         self._loaded_collections = False
         self._loaded_information = False
@@ -636,7 +635,8 @@ class ApiRoot(_TAXIIEndpoint):
         self._collections = []
         for item in response.get("collections", []):  # optional
             collection_url = url + item["id"] + "/"
-            collection = Collection(collection_url, conn=self._conn, **item)
+            collection = Collection(collection_url,
+                                    conn_factory=self._conn_factory, **item)
             self._collections.append(collection)
 
         self._loaded_collections = True
@@ -644,7 +644,7 @@ class ApiRoot(_TAXIIEndpoint):
     def get_status(self, status_id, accept=MEDIA_TYPE_TAXII_V20):
         status_url = self.url + "status/" + status_id + "/"
         response = self._conn.get(status_url, accept=accept)
-        return Status(status_url, conn=self._conn, **response)
+        return Status(status_url, conn_factory=self._conn_factory, **response)
 
 
 class Server(_TAXIIEndpoint):
@@ -652,29 +652,21 @@ class Server(_TAXIIEndpoint):
 
     This class corresponds to the Server Discovery endpoint (section 4.1) and
     the Discovery Resource returned from that endpoint (section 4.1.1).
-
-    ApiRoot instances obtained from an instance of this class are
-    created with the same username/password as was used in this instance.  If
-    that's incorrect, an ApiRoot instance may be created directly with the
-    desired username and password.  Also, they use separate connection pools
-    so that they can be independent: closing one won't close others, and
-    closing this server object won't close any of the ApiRoot objects (which
-    may refer to different hosts than was used for discovery).
-
     """
 
-    def __init__(self, url, conn=None, user=None, password=None):
+    def __init__(self, url, conn_factory=None, user=None, password=None):
         """Create a server discovery endpoint.
 
         Args:
             url (str): URL of a TAXII server discovery endpoint
             user (str): username for authentication (optional)
             password (str): password for authentication (optional)
-            conn (_HTTPConnection): reuse connection object, as an alternative
-                to providing username/password
+            conn_factory (_ConnectionFactory): a factory to get a connection
+                from, as an alternative to providing username/password
 
         """
-        super(Server, self).__init__(url, conn, user, password)
+        super(Server, self).__init__("server", url, conn_factory, user,
+                                     password)
 
         self._user = user
         self._password = password
@@ -725,8 +717,7 @@ class Server(_TAXIIEndpoint):
         self._contact = response.get("contact")  # optional
         roots = response.get("api_roots", [])  # optional
         self._api_roots = [ApiRoot(url,
-                                   user=self._user,
-                                   password=self._password)
+                                   conn_factory=self._conn_factory)
                            for url in roots]
         # If 'default' is one of the existing API Roots, reuse that object
         # rather than creating a duplicate. The TAXII 2.0 spec says that the
@@ -832,3 +823,228 @@ class _HTTPConnection(object):
     def close(self):
         """Closes connections.  This object is no longer usable."""
         self.session.close()
+
+
+class _ConnectionFactory(object):
+    """
+    Gives the interface expected for connection factories.  This class can
+    be subclassed to create actual factories.
+    """
+    def get_connection(self, endpoint_type, url):
+        """
+        Return a connection based on the given information.  The two parameters
+        to this method identify the endpoint instance which needs the
+        connection.  They basically identify "who's asking", and may be
+        somewhat redundant (inasmuch as it's possible to infer the endpoint
+        type from the URL structure).  But it makes factory implementation
+        simpler.
+
+        Each instance of each endpoint class (Server, ApiRoot, Collection,
+        Status) is based on a particular URL.  The requests it makes are based
+        on that URL, but aren't necessarily all to that exact URL.  It's that
+        base URL which is passed into the factory to obtain a connection.
+
+        Callers are responsible for closing the connections.
+
+        :param endpoint_type: The type of endpoint.  One of "server", "apiroot",
+            "collection", "status".
+        :param url: The URL of the endpoint object who is requesting the
+            connection.
+        :return: The connection
+        """
+        raise NotImplementedError()
+
+
+class SingleConnectionFactory(_ConnectionFactory):
+    """
+    Factory which creates a single connection and uses it for everything.
+    """
+    def __init__(self, *conn_args, **conn_kwargs):
+        """
+        Initialize the factory.
+
+        :param conn_args: Positional args passed directly through to the
+            created _HTTPConnection.
+        :param conn_kwargs: Keyword args passed directly through to the
+            created _HTTPConnection.
+        """
+        self.__conn = _HTTPConnection(*conn_args, **conn_kwargs)
+
+    def get_connection(self, endpoint_type, url):
+        return self.__conn
+
+
+class PerHostConnectionFactory(_ConnectionFactory):
+    """
+    Factory which reuses a different connection for each different host being
+    connected to.
+    """
+    def __init__(self, *conn_args, **conn_kwargs):
+        """
+        Initialize the factory.
+
+        :param conn_args: Positional args passed directly through to each
+            created _HTTPConnection.
+        :param conn_kwargs: Keyword args passed directly through to each
+            created _HTTPConnection.
+        """
+        self.__conn_args = conn_args
+        self.__conn_kwargs = conn_kwargs
+        self.__conn_map = {}
+
+    def get_connection(self, endpoint_type, url):
+        url = urlparse.urlparse(url)
+        if url.hostname in self.__conn_map:
+            return self.__conn_map[url.hostname]
+
+        new_conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+        self.__conn_map[url.hostname] = new_conn
+        return new_conn
+
+
+class InheritApiRootConnectionFactory(_ConnectionFactory):
+    """
+    Factory which gives each Server and ApiRoot its own connection, but
+    collection/status inherits from their parent ApiRoot's.
+    """
+    def __init__(self, *conn_args, **conn_kwargs):
+        """
+        Initialize the factory.
+
+        :param conn_args: Positional args passed directly through to each
+            created _HTTPConnection.
+        :param conn_kwargs: Keyword args passed directly through to each
+            created _HTTPConnection.
+        """
+        self.__conn_args = conn_args
+        self.__conn_kwargs = conn_kwargs
+        self.__conn_map = {}
+
+    def get_connection(self, endpoint_type, url):
+
+        if endpoint_type == "server":
+            # Servers always get a new one
+            conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+
+        elif endpoint_type == "apiroot":
+            # Do a "normalization" pass on the url, since we will be comparing
+            # this with api-root URLs derived from collection/status URLs.
+            # Don't want some silly meaningless difference to get in the way...
+            url = urlparse.urlparse(url).geturl()
+
+            # ApiRoot's always get a new one, also store for reuse with
+            # collections/status.  But it is possible that the collection/
+            # status endpoint was accessed first.  In that case, a connection
+            # for its corresponding api-root should already have been added.
+            # So check for that first.
+            if url in self.__conn_map:
+                conn = self.__conn_map[url]
+            else:
+                conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+                self.__conn_map[url] = conn
+
+        else:
+            # Collection/status reuses api-root connection.  If for some reason
+            # a connection for the api-root isn't found, a new connection is
+            # created (and reused for the same api-root).
+            parsed_url = urlparse.urlparse(url)
+
+            if endpoint_type == "collection":
+                apiroot_path = apiroot_from_collection(parsed_url.path)
+            else:
+                apiroot_path = apiroot_from_status(parsed_url.path)
+
+            apiroot_url = urlparse.urlunparse((
+                parsed_url[0],
+                parsed_url[1],
+                apiroot_path,
+                parsed_url[3],
+                parsed_url[4],
+                parsed_url[5]
+            ))
+
+            if apiroot_url in self.__conn_map:
+                conn = self.__conn_map[apiroot_url]
+            else:
+                conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+                self.__conn_map[apiroot_url] = conn
+
+        return conn
+
+
+_UUID_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.I)
+
+
+def _strip_last_two_components(url_path, second_to_last_component):
+    """
+    Expects a URL path of the form:
+
+        /<api-root>/<some-word>/<uuid>/
+
+    and strips off the last two path components, leaving the api root.  This
+    function also checks that the second-to-last component (<some-word>) matches
+    the given word, and that the last component is a valid UUID.
+
+    The URL path should begin and end with "/", and the returned api root will
+    also end with "/".  If there were only two path components and both
+    satisfied the above requirements, the returned api root is "/".
+
+    :param url_path: The URL path to process
+    :param second_to_last_component: The word expected in the second-to-last
+        component of the path
+    :return: The api root, or None if the URL path was invalid
+    """
+    second_to_last_slash_idx = url_path.rfind("/", 0, -1)
+    if second_to_last_slash_idx <= len(second_to_last_component):
+        return None
+
+    # Ensure the second-to-last path component is correct
+    # and last path component is a valid UUID
+    api_root_path = None
+    if url_path[:second_to_last_slash_idx].endswith(
+            "/" + second_to_last_component) and \
+            _UUID_RE.match(url_path[second_to_last_slash_idx+1:-1]):
+        api_root_path = url_path[:second_to_last_slash_idx -
+                                  len(second_to_last_component)]
+
+    return api_root_path
+
+
+def apiroot_from_collection(url_path):
+    """
+    The URL path for a TAXII collection is formatted as:
+
+        /<api-root>/collections/<id>/
+
+    This function finds the last two path components and strips them off,
+    leaving the api root.
+
+    :param url_path: The collection URL path
+    :return: The api root path
+    """
+
+    api_root_path = _strip_last_two_components(url_path, "collections")
+    if api_root_path is None:
+        raise InvalidArgumentsError(
+            "Not a valid collection URL path: {}".format(url_path))
+    return api_root_path
+
+
+def apiroot_from_status(url_path):
+    """
+    The URL path for a TAXII status endpoint is formatted as:
+
+        /<api-root>/status/<id>/
+
+    This function finds the last two path components and strips them off,
+    leaving the api root.
+
+    :param url_path: The status endpoint URL path
+    :return: The api root path
+    """
+
+    api_root_path = _strip_last_two_components(url_path, "status")
+    if api_root_path is None:
+        raise InvalidArgumentsError(
+            "Not a valid status endpoint URL path: {}".format(url_path))
+    return api_root_path

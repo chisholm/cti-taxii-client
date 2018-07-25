@@ -9,7 +9,7 @@ from taxii2client import (
     MEDIA_TYPE_STIX_V20, MEDIA_TYPE_TAXII_V20, AccessError, ApiRoot,
     Collection, InvalidArgumentsError, Server, Status, TAXIIServiceException,
     ValidationError, _filter_kwargs_to_query_params, _HTTPConnection,
-    _TAXIIEndpoint
+    _TAXIIEndpoint, SingleConnectionFactory
 )
 
 TAXII_SERVER = "example.com"
@@ -435,7 +435,7 @@ def test_collection(collection):
 
 
 def test_collection_unexpected_kwarg():
-    with pytest.raises(TypeError):
+    with pytest.raises(InvalidArgumentsError):
         Collection(url="", conn=None, foo="bar")
 
 
@@ -636,12 +636,12 @@ def test_params_filter_unknown():
 
 def test_taxii_endpoint_raises_exception():
     """Test exception is raised when conn and (user or pass) is provided"""
-    conn = _HTTPConnection(user="foo", password="bar", verify=False)
+    conn_factory = SingleConnectionFactory(user="foo", password="bar", verify=False)
 
     with pytest.raises(InvalidArgumentsError) as excinfo:
-        _TAXIIEndpoint("https://example.com/api1/collections/", conn, "other", "test")
+        _TAXIIEndpoint("https://example.com/api1/collections/", conn_factory, "other", "test")
 
-    assert "A connection and user/password may not both be provided." in str(excinfo.value)
+    assert "A connection factory and user/password may not both be provided." in str(excinfo.value)
 
 
 @responses.activate
