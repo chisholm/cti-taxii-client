@@ -9,7 +9,9 @@ from taxii2client import (
     MEDIA_TYPE_STIX_V20, MEDIA_TYPE_TAXII_V20, AccessError, ApiRoot,
     Collection, InvalidArgumentsError, Server, Status, TAXIIServiceException,
     ValidationError, _filter_kwargs_to_query_params, _HTTPConnection,
-    _TAXIIEndpoint, SingleConnectionFactory
+    _TAXIIEndpoint, SingleConnectionFactory, PerHostConnectionFactory,
+    InheritApiRootConnectionFactory, apiroot_from_collection,
+    apiroot_from_status
 )
 
 TAXII_SERVER = "example.com"
@@ -759,3 +761,167 @@ def test_collection_missing_can_write_property(collection_dict):
                    user="foo", password="bar", **collection_dict)
 
     assert "No 'can_write' in Collection for request 'https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/'" == str(excinfo.value)
+
+
+@pytest.mark.parametrize("collection_path, apiroot_path", [
+    ("/foo/collections/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/", "/foo/"),
+    ("/collections/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/", "/")
+])
+def test_apiroot_from_collection(collection_path, apiroot_path):
+    assert apiroot_from_collection(collection_path) == apiroot_path
+
+
+@pytest.mark.parametrize("collection_path", [
+    "collections/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/",
+    "/collections/1b4f7b00-a194-47e7-b9e0-0fb61be439e2",
+    "collections/1b4f7b00-a194-47e7-b9e0-0fb61be439e2",
+    ""
+])
+def test_apiroot_from_collection_error(collection_path):
+    with pytest.raises(InvalidArgumentsError):
+        apiroot_from_collection(collection_path)
+
+
+@pytest.mark.parametrize("status_path, apiroot_path", [
+    ("/foo/status/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/", "/foo/"),
+    ("/status/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/", "/")
+])
+def test_apiroot_from_status(status_path, apiroot_path):
+    assert apiroot_from_status(status_path) == apiroot_path
+
+
+@pytest.mark.parametrize("status_path", [
+    "status/1b4f7b00-a194-47e7-b9e0-0fb61be439e2/",
+    "/status/1b4f7b00-a194-47e7-b9e0-0fb61be439e2",
+    "status/1b4f7b00-a194-47e7-b9e0-0fb61be439e2",
+    ""
+])
+def test_apiroot_from_status_error(status_path):
+    with pytest.raises(InvalidArgumentsError):
+        apiroot_from_status(status_path)
+
+# A sample sequence of requests, to see where connection reuse occurs or does
+# not occur.
+_REQUEST_SEQUENCE = [
+    ("server", "http://test1.org/taxii/"),
+    ("server", "http://test2.org/taxii/"),
+    ("server", "http://test1.org/taxii/"),
+    ("apiroot", "http://example1.org/api1/"),
+    ("apiroot", "http://example2.org/api2/"),
+    ("apiroot", "http://example1.org/api1/"),
+    ("collection", "http://example1.org/api1/collections/740ebeb3-1b81-4e99-87e6-ce79da5fb453/"),
+    ("collection", "http://example2.org/api2/collections/25ffd0bd-cdcc-40cf-97e6-b341d9bfca3b/"),
+    ("collection", "http://example1.org/api1/collections/740ebeb3-1b81-4e99-87e6-ce79da5fb453/"),
+    ("status", "http://example1.org/api1/status/44cbfac2-0956-42d9-a9e8-39172ca839d5/"),
+    ("status", "http://example2.org/api2/status/4be86745-9b81-484c-80d1-57afcc8f9b07/"),
+    ("status", "http://example1.org/api1/status/44cbfac2-0956-42d9-a9e8-39172ca839d5/"),
+
+    # Try jumping to a collection and status without having first seen the api
+    # roots.
+    ("collection", "http://example3.org/api3/collections/62f06942-8863-4394-a1eb-a33356071883/"),
+    ("status", "http://example4.org/api4/status/75498ced-cce4-4d07-a740-e982ae8833c0/"),
+
+    # Test an api root located at a root path
+    ("apiroot", "http://example5.org/"),
+    ("status", "http://example5.org/status/5c7603d2-851c-4c45-8751-9a47922daecc/"),
+
+    # Test visiting api root after we already visited its status endpoint
+    ("apiroot", "http://example4.org/api4/")
+]
+
+
+def trace_reuse(conn_factory):
+    """
+    Run through the _REQUEST_SEQUENCE sequence using the given factory, and
+    return a list of values indicating which connections were new and reused.
+    If the Nth connection was new, the corresponding tracking value is "new".
+    Otherwise, it is the URL of the endpoint whose connection was reused.
+
+    :param conn_factory: A connection factory
+    :return: A list of tracking data.
+    """
+    # keep the connection objects alive so that IDs aren't accidentally reused
+    # for different connections, causing false "reuse" detection
+    used_conns = []
+
+    # Records whether each connection was new or reused, and reused from what
+    trace = []
+
+    # Maps id's of connections to a URL, for easy tracking
+    conn_name_map = {}
+
+    for req in _REQUEST_SEQUENCE:
+        conn = conn_factory.get_connection(*req)
+        used_conns.append(conn)
+
+        id_conn = id(conn)
+        if id_conn in conn_name_map:
+            reused_conn_name = conn_name_map[id_conn]
+            trace.append(reused_conn_name)
+        else:
+            conn_name_map[id_conn] = req[1]
+            trace.append("new")
+
+    return trace
+
+
+def test_single_connection_factory():
+    # Only first connection is new.  Others reuse the first.
+    assert trace_reuse(SingleConnectionFactory()) == ["new"] + \
+           [_REQUEST_SEQUENCE[0][1]] * (len(_REQUEST_SEQUENCE) - 1)
+
+
+def test_per_host_connection_factory():
+    assert trace_reuse(PerHostConnectionFactory()) == [
+        "new",
+        "new",
+        "http://test1.org/taxii/",
+
+        "new",
+        "new",
+        "http://example1.org/api1/",
+
+        "http://example1.org/api1/",
+        "http://example2.org/api2/",
+        "http://example1.org/api1/",
+
+        "http://example1.org/api1/",
+        "http://example2.org/api2/",
+        "http://example1.org/api1/",
+
+        "new",
+        "new",
+
+        "new",
+        "http://example5.org/",
+
+        "http://example4.org/api4/status/75498ced-cce4-4d07-a740-e982ae8833c0/"
+    ]
+
+
+def test_inherit_apiroot_connection_factory():
+    assert trace_reuse(InheritApiRootConnectionFactory()) == [
+        "new",
+        "new",
+        "new",
+
+        "new",
+        "new",
+        "http://example1.org/api1/",
+
+        "http://example1.org/api1/",
+        "http://example2.org/api2/",
+        "http://example1.org/api1/",
+
+        "http://example1.org/api1/",
+        "http://example2.org/api2/",
+        "http://example1.org/api1/",
+
+        "new",
+        "new",
+
+        "new",
+        "http://example5.org/",
+
+        "http://example4.org/api4/status/75498ced-cce4-4d07-a740-e982ae8833c0/"
+    ]
