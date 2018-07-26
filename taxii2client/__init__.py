@@ -932,7 +932,7 @@ class InheritApiRootConnectionFactory(_ConnectionFactory):
             # Don't want some silly meaningless difference to get in the way...
             url = urlparse.urlparse(url).geturl()
 
-            # ApiRoot's always get a new one, also store for reuse with
+            # ApiRoot's most likely get a new one, also store for reuse with
             # collections/status.  But it is possible that the collection/
             # status endpoint was accessed first.  In that case, a connection
             # for its corresponding api-root should already have been added.
