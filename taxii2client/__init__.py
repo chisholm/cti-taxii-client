@@ -135,8 +135,7 @@ class _TAXIIEndpoint(object):
     resources are released.
 
     """
-    def __init__(self, endpoint_type, url, conn_factory=None, user=None,
-                 password=None):
+    def __init__(self, endpoint_type, url, conn_factory=None):
         """Create a TAXII endpoint.
 
         Args:
@@ -145,17 +144,12 @@ class _TAXIIEndpoint(object):
             url (str): The URL of the endpoint
             conn_factory (_ConnectionFactory): A factory used to obtain a
                 connection for this endpoint. (optional)
-            user (str): username for authentication (optional)
-            password (str): password for authentication (optional)
 
         """
-        if conn_factory and (user or password):
-            raise InvalidArgumentsError("A connection factory and user/password"
-                                        " may not both be provided.")
-        elif conn_factory:
+        if conn_factory:
             self._conn_factory = conn_factory
         else:
-            self._conn_factory = InheritApiRootConnectionFactory(user, password)
+            self._conn_factory = InheritApiRootConnectionFactory()
 
         self._conn = self._conn_factory.get_connection(endpoint_type, url)
 
@@ -184,20 +178,16 @@ class Status(_TAXIIEndpoint):
     # than just getting them returned from Collection.add_objects(), and there
     # aren't other endpoints to call on the Status object.
 
-    def __init__(self, url, conn_factory=None, user=None, password=None,
-                 **kwargs):
+    def __init__(self, url, conn_factory=None, **kwargs):
         """Create an API root resource endpoint.
 
         Args:
             url (str): URL of a TAXII status resource endpoint
             conn_factory (_ConnectionFactory): a factory to get a connection
-                from, as an alternative to providing username/password
-            user (str): username for authentication (optional)
-            password (str): password for authentication (optional)
+                from
 
         """
-        super(Status, self).__init__("status", url, conn_factory, user,
-                                     password)
+        super(Status, self).__init__("status", url, conn_factory)
         if kwargs:
             self._populate_fields(**kwargs)
         else:
@@ -318,8 +308,7 @@ class Collection(_TAXIIEndpoint):
         - ``Get Object Manifests`` (section 5.6)
     """
 
-    def __init__(self, url, conn_factory=None, user=None, password=None,
-                 **kwargs):
+    def __init__(self, url, conn_factory=None, **kwargs):
         """
         Initialize a new Collection.  Either user/password or conn may be
         given, but not both.  The latter is intended for internal use, when
@@ -329,16 +318,13 @@ class Collection(_TAXIIEndpoint):
 
         Args:
             url (str): A TAXII endpoint for a collection
-            user (str): User name for authentication (optional)
-            password (str): Password for authentication (optional)
             conn_factory (_ConnectionFactory): a factory to get a connection
-                from, as an alternative to providing username/password
+                from
             kwargs: Collection metadata, if known in advance (optional)
 
         """
 
-        super(Collection, self).__init__("collection", url, conn_factory, user,
-                                         password)
+        super(Collection, self).__init__("collection", url, conn_factory)
 
         self._loaded = False
 
@@ -542,19 +528,16 @@ class ApiRoot(_TAXIIEndpoint):
     (section 4.2.1) and ``Collections Resource`` (section 5.1.1).
     """
 
-    def __init__(self, url, conn_factory=None, user=None, password=None):
+    def __init__(self, url, conn_factory=None):
         """Create an API root resource endpoint.
 
         Args:
             url (str): URL of a TAXII API root resource endpoint
-            user (str): username for authentication (optional)
-            password (str): password for authentication (optional)
             conn_factory (_ConnectionFactory): a factory to get a connection
-                from, as an alternative to providing username/password
+                from
 
         """
-        super(ApiRoot, self).__init__("apiroot", url, conn_factory, user,
-                                      password)
+        super(ApiRoot, self).__init__("apiroot", url, conn_factory)
 
         self._loaded_collections = False
         self._loaded_information = False
@@ -654,22 +637,17 @@ class Server(_TAXIIEndpoint):
     the Discovery Resource returned from that endpoint (section 4.1.1).
     """
 
-    def __init__(self, url, conn_factory=None, user=None, password=None):
+    def __init__(self, url, conn_factory=None):
         """Create a server discovery endpoint.
 
         Args:
             url (str): URL of a TAXII server discovery endpoint
-            user (str): username for authentication (optional)
-            password (str): password for authentication (optional)
             conn_factory (_ConnectionFactory): a factory to get a connection
-                from, as an alternative to providing username/password
+                from
 
         """
-        super(Server, self).__init__("server", url, conn_factory, user,
-                                     password)
+        super(Server, self).__init__("server", url, conn_factory)
 
-        self._user = user
-        self._password = password
         self._loaded = False
 
     @property
