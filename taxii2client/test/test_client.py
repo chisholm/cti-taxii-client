@@ -8,7 +8,7 @@ import six
 from taxii2client import (
     MEDIA_TYPE_STIX_V20, MEDIA_TYPE_TAXII_V20, AccessError, ApiRoot,
     Collection, InvalidArgumentsError, Server, Status, TAXIIServiceException,
-    ValidationError, _filter_kwargs_to_query_params, _HTTPConnection,
+    ValidationError, _filter_kwargs_to_query_params, HTTPConnection,
     _TAXIIEndpoint, SingleConnectionFactory, PerHostConnectionFactory,
     InheritApiRootConnectionFactory, apiroot_from_collection,
     apiroot_from_status
@@ -654,7 +654,7 @@ def test_valid_content_type_for_connection():
                   status=200,
                   content_type=MEDIA_TYPE_TAXII_V20 + "; charset=utf-8")
 
-    conn = _HTTPConnection(user="foo", password="bar", verify=False)
+    conn = HTTPConnection(user="foo", password="bar", verify=False)
     conn.get("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/", MEDIA_TYPE_TAXII_V20, None)
 
 
@@ -665,7 +665,7 @@ def test_invalid_content_type_for_connection():
                   content_type=MEDIA_TYPE_TAXII_V20)
 
     with pytest.raises(TAXIIServiceException) as excinfo:
-        conn = _HTTPConnection(user="foo", password="bar", verify=False)
+        conn = HTTPConnection(user="foo", password="bar", verify=False)
         conn.get("https://example.com/api1/collections/91a7b528-80eb-42ed-a74d-c6fbd5a26116/", MEDIA_TYPE_TAXII_V20 + "; charset=utf-8", None)
 
     assert ("Unexpected Response. Got Content-Type: 'application/vnd.oasis.taxii+json; "

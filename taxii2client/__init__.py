@@ -729,7 +729,7 @@ class Server(_TAXIIEndpoint):
         self._loaded = True
 
 
-class _HTTPConnection(object):
+class HTTPConnection(object):
     """This library uses the ``requests`` library, which presents a convenience
     API which hides many network details like actual connection objects.  So
     this class doesn't represent a traditional ``connection`` either.  It's a
@@ -864,11 +864,11 @@ class SingleConnectionFactory(_ConnectionFactory):
         Initialize the factory.
 
         :param conn_args: Positional args passed directly through to the
-            created _HTTPConnection.
+            created HTTPConnection.
         :param conn_kwargs: Keyword args passed directly through to the
-            created _HTTPConnection.
+            created HTTPConnection.
         """
-        self.__conn = _HTTPConnection(*conn_args, **conn_kwargs)
+        self.__conn = HTTPConnection(*conn_args, **conn_kwargs)
 
     def get_connection(self, endpoint_type, url):
         return self.__conn
@@ -884,9 +884,9 @@ class PerHostConnectionFactory(_ConnectionFactory):
         Initialize the factory.
 
         :param conn_args: Positional args passed directly through to each
-            created _HTTPConnection.
+            created HTTPConnection.
         :param conn_kwargs: Keyword args passed directly through to each
-            created _HTTPConnection.
+            created HTTPConnection.
         """
         self.__conn_args = conn_args
         self.__conn_kwargs = conn_kwargs
@@ -897,7 +897,7 @@ class PerHostConnectionFactory(_ConnectionFactory):
         if url.hostname in self.__conn_map:
             return self.__conn_map[url.hostname]
 
-        new_conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+        new_conn = HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
         self.__conn_map[url.hostname] = new_conn
         return new_conn
 
@@ -912,9 +912,9 @@ class InheritApiRootConnectionFactory(_ConnectionFactory):
         Initialize the factory.
 
         :param conn_args: Positional args passed directly through to each
-            created _HTTPConnection.
+            created HTTPConnection.
         :param conn_kwargs: Keyword args passed directly through to each
-            created _HTTPConnection.
+            created HTTPConnection.
         """
         self.__conn_args = conn_args
         self.__conn_kwargs = conn_kwargs
@@ -924,7 +924,7 @@ class InheritApiRootConnectionFactory(_ConnectionFactory):
 
         if endpoint_type == "server":
             # Servers always get a new one
-            conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+            conn = HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
 
         elif endpoint_type == "apiroot":
             # Do a "normalization" pass on the url, since we will be comparing
@@ -940,7 +940,7 @@ class InheritApiRootConnectionFactory(_ConnectionFactory):
             if url in self.__conn_map:
                 conn = self.__conn_map[url]
             else:
-                conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+                conn = HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
                 self.__conn_map[url] = conn
 
         else:
@@ -966,7 +966,7 @@ class InheritApiRootConnectionFactory(_ConnectionFactory):
             if apiroot_url in self.__conn_map:
                 conn = self.__conn_map[apiroot_url]
             else:
-                conn = _HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
+                conn = HTTPConnection(*self.__conn_args, **self.__conn_kwargs)
                 self.__conn_map[apiroot_url] = conn
 
         return conn
